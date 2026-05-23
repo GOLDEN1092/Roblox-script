@@ -1,0 +1,833 @@
+-- Final script – time monitor checks every 1 second for faster night activation
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+-- ========== UI CONFIGURATION ==========
+local PANEL_W = 162
+local PANEL_H = 118
+local BUTTON_SIZE = UDim2.new(0, PANEL_W, 0, PANEL_H)
+local BUTTON_POSITION = UDim2.new(0.5, -PANEL_W / 2, 0.5, -PANEL_H / 2)
+local INDICATOR_SIZE = 8
+local HEADER_H = 36
+-- =======================================
+
+-- Colors
+local COL_BG         = Color3.fromRGB(7, 9, 17)
+local COL_HEADER     = Color3.fromRGB(13, 16, 28)
+local COL_DIVIDER    = Color3.fromRGB(35, 40, 68)
+local COL_ACTION_BG  = Color3.fromRGB(16, 20, 36)
+local COL_TITLE      = Color3.fromRGB(155, 162, 198)
+local COL_ACTION_TXT = Color3.fromRGB(210, 215, 238)
+local COL_BADGE_BG   = Color3.fromRGB(22, 18, 42)
+local COL_BADGE_TXT  = Color3.fromRGB(90, 88, 148)
+local COL_STROKE_OFF = Color3.fromRGB(185, 45, 45)
+local COL_STROKE_ON  = Color3.fromRGB(30, 215, 120)
+local COL_IND_OFF    = Color3.fromRGB(210, 48, 48)
+local COL_IND_ON     = Color3.fromRGB(30, 215, 120)
+local COL_ACTION_STR = Color3.fromRGB(45, 50, 85)
+
+-- =========================================
+-- CREATE GUI
+-- =========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ConsumableToggleGUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Main draggable panel (ImageButton for input events)
+local button = Instance.new("ImageButton")
+button.Size = BUTTON_SIZE
+button.Position = BUTTON_POSITION
+button.BackgroundColor3 = COL_BG
+button.BackgroundTransparency = 0
+button.BorderSizePixel = 0
+button.AutoButtonColor = false
+button.ClipsDescendants = true
+button.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 12)
+corner.Parent = button
+
+-- Panel background gradient (top-left highlight)
+local panelGrad = Instance.new("UIGradient")
+panelGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 24, 44)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(6, 8, 15)),
+})
+panelGrad.Rotation = 145
+panelGrad.Parent = button
+
+-- Outer border (animated on toggle)
+local stroke = Instance.new("UIStroke")
+stroke.Color = COL_STROKE_OFF
+stroke.Thickness = 1.5
+stroke.Transparency = 0.25
+stroke.Parent = button
+
+-- =========================================
+-- HEADER SECTION
+-- =========================================
+local headerFrame = Instance.new("Frame")
+headerFrame.Size = UDim2.new(1, 0, 0, HEADER_H)
+headerFrame.Position = UDim2.new(0, 0, 0, 0)
+headerFrame.BackgroundTransparency = 1
+headerFrame.BorderSizePixel = 0
+headerFrame.Parent = button
+
+-- Padding inside header
+local headerPad = Instance.new("UIPadding")
+headerPad.PaddingLeft = UDim.new(0, 12)
+headerPad.PaddingRight = UDim.new(0, 10)
+headerPad.Parent = headerFrame
+
+-- Status indicator dot
+local indicator = Instance.new("Frame")
+indicator.Size = UDim2.new(0, INDICATOR_SIZE, 0, INDICATOR_SIZE)
+indicator.Position = UDim2.new(0, 0, 0.5, -INDICATOR_SIZE / 2)
+indicator.BackgroundColor3 = COL_IND_OFF
+indicator.BorderSizePixel = 0
+indicator.Parent = headerFrame
+
+local indicatorCorner = Instance.new("UICorner")
+indicatorCorner.CornerRadius = UDim.new(1, 0)
+indicatorCorner.Parent = indicator
+
+-- Glow ring behind indicator (slightly larger, transparent)
+local indicatorGlow = Instance.new("Frame")
+indicatorGlow.Size = UDim2.new(0, INDICATOR_SIZE + 6, 0, INDICATOR_SIZE + 6)
+indicatorGlow.Position = UDim2.new(0, -3, 0.5, -(INDICATOR_SIZE + 6) / 2)
+indicatorGlow.BackgroundColor3 = COL_IND_OFF
+indicatorGlow.BackgroundTransparency = 0.72
+indicatorGlow.BorderSizePixel = 0
+indicatorGlow.ZIndex = indicator.ZIndex - 1
+indicatorGlow.Parent = headerFrame
+
+local indicatorGlowCorner = Instance.new("UICorner")
+indicatorGlowCorner.CornerRadius = UDim.new(1, 0)
+indicatorGlowCorner.Parent = indicatorGlow
+
+-- Title label
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -(INDICATOR_SIZE + 8 + 46), 1, 0)
+titleLabel.Position = UDim2.new(0, INDICATOR_SIZE + 8, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "AUTO KITS"
+titleLabel.TextColor3 = COL_TITLE
+titleLabel.TextSize = 12
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.TextYAlignment = Enum.TextYAlignment.Center
+titleLabel.Parent = headerFrame
+
+-- Version badge (top-right of header)
+local badge = Instance.new("Frame")
+badge.Size = UDim2.new(0, 40, 0, 17)
+badge.Position = UDim2.new(1, -40, 0.5, -8.5)
+badge.BackgroundColor3 = COL_BADGE_BG
+badge.BackgroundTransparency = 0
+badge.BorderSizePixel = 0
+badge.Parent = headerFrame
+
+local badgeCorner = Instance.new("UICorner")
+badgeCorner.CornerRadius = UDim.new(0, 4)
+badgeCorner.Parent = badge
+
+local badgeStroke = Instance.new("UIStroke")
+badgeStroke.Color = Color3.fromRGB(55, 50, 100)
+badgeStroke.Thickness = 1
+badgeStroke.Transparency = 0.5
+badgeStroke.Parent = badge
+
+local badgeLabel = Instance.new("TextLabel")
+badgeLabel.Size = UDim2.new(1, 0, 1, 0)
+badgeLabel.BackgroundTransparency = 1
+badgeLabel.Text = "v2.0"
+badgeLabel.TextColor3 = COL_BADGE_TXT
+badgeLabel.TextSize = 10
+badgeLabel.Font = Enum.Font.GothamBold
+badgeLabel.TextXAlignment = Enum.TextXAlignment.Center
+badgeLabel.TextYAlignment = Enum.TextYAlignment.Center
+badgeLabel.Parent = badge
+
+-- =========================================
+-- DIVIDER
+-- =========================================
+local divider = Instance.new("Frame")
+divider.Size = UDim2.new(1, -24, 0, 1)
+divider.Position = UDim2.new(0, 12, 0, HEADER_H)
+divider.BackgroundColor3 = COL_DIVIDER
+divider.BackgroundTransparency = 0
+divider.BorderSizePixel = 0
+divider.Parent = button
+
+-- =========================================
+-- ACTION SECTION
+-- =========================================
+local actionFrame = Instance.new("Frame")
+actionFrame.Size = UDim2.new(1, 0, 0, PANEL_H - HEADER_H - 1 - 34)
+actionFrame.Position = UDim2.new(0, 0, 0, HEADER_H + 1)
+actionFrame.BackgroundTransparency = 1
+actionFrame.BorderSizePixel = 0
+actionFrame.Parent = button
+
+-- Inner styled pill for the toggle text
+local actionBg = Instance.new("Frame")
+actionBg.Size = UDim2.new(1, -22, 0, 28)
+actionBg.Position = UDim2.new(0, 11, 0.5, -14)
+actionBg.BackgroundColor3 = COL_ACTION_BG
+actionBg.BackgroundTransparency = 0
+actionBg.BorderSizePixel = 0
+actionBg.Parent = actionFrame
+
+local actionBgCorner = Instance.new("UICorner")
+actionBgCorner.CornerRadius = UDim.new(0, 7)
+actionBgCorner.Parent = actionBg
+
+local actionBgStroke = Instance.new("UIStroke")
+actionBgStroke.Color = COL_ACTION_STR
+actionBgStroke.Thickness = 1
+actionBgStroke.Transparency = 0.4
+actionBgStroke.Parent = actionBg
+
+-- Subtle inner gradient on action pill
+local actionGrad = Instance.new("UIGradient")
+actionGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(28, 34, 60)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 15, 28)),
+})
+actionGrad.Rotation = 90
+actionGrad.Parent = actionBg
+
+-- Toggle text label
+local textLabel = Instance.new("TextLabel")
+textLabel.Size = UDim2.new(1, 0, 1, 0)
+textLabel.BackgroundTransparency = 1
+textLabel.Text = "ACTIVATE"
+textLabel.TextColor3 = COL_ACTION_TXT
+textLabel.TextScaled = false
+textLabel.TextSize = 13
+textLabel.Font = Enum.Font.GothamBold
+textLabel.TextXAlignment = Enum.TextXAlignment.Center
+textLabel.TextYAlignment = Enum.TextYAlignment.Center
+textLabel.Parent = actionBg
+
+-- =========================================
+-- SECOND DIVIDER
+-- =========================================
+local divider2 = Instance.new("Frame")
+divider2.Size = UDim2.new(1, -24, 0, 1)
+divider2.Position = UDim2.new(0, 12, 0, PANEL_H - 34)
+divider2.BackgroundColor3 = COL_DIVIDER
+divider2.BackgroundTransparency = 0
+divider2.BorderSizePixel = 0
+divider2.Parent = button
+
+-- =========================================
+-- AMMO ROW
+-- =========================================
+local ammoRow = Instance.new("Frame")
+ammoRow.Size = UDim2.new(1, 0, 0, 34)
+ammoRow.Position = UDim2.new(0, 0, 1, -34)
+ammoRow.BackgroundTransparency = 1
+ammoRow.BorderSizePixel = 0
+ammoRow.Parent = button
+
+-- Ammo status dot
+local ammoDot = Instance.new("Frame")
+ammoDot.Size = UDim2.new(0, INDICATOR_SIZE, 0, INDICATOR_SIZE)
+ammoDot.Position = UDim2.new(0, 12, 0.5, -INDICATOR_SIZE / 2)
+ammoDot.BackgroundColor3 = Color3.fromRGB(60, 120, 220)
+ammoDot.BorderSizePixel = 0
+ammoDot.Parent = ammoRow
+
+local ammoDotCorner = Instance.new("UICorner")
+ammoDotCorner.CornerRadius = UDim.new(1, 0)
+ammoDotCorner.Parent = ammoDot
+
+-- Ammo label
+local ammoStatusLabel = Instance.new("TextLabel")
+ammoStatusLabel.Size = UDim2.new(1, -(INDICATOR_SIZE + 20), 1, 0)
+ammoStatusLabel.Position = UDim2.new(0, INDICATOR_SIZE + 20, 0, 0)
+ammoStatusLabel.BackgroundTransparency = 1
+ammoStatusLabel.Text = "AMMO: ALWAYS ON"
+ammoStatusLabel.TextColor3 = Color3.fromRGB(100, 130, 200)
+ammoStatusLabel.TextSize = 9
+ammoStatusLabel.Font = Enum.Font.GothamBold
+ammoStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+ammoStatusLabel.TextYAlignment = Enum.TextYAlignment.Center
+ammoStatusLabel.Parent = ammoRow
+
+local function setAmmoStatus(refilling)
+    local col = refilling and Color3.fromRGB(80, 210, 255) or Color3.fromRGB(60, 120, 220)
+    local txt = refilling and "AMMO: REFILLING…" or "AMMO: ALWAYS ON"
+    TweenService:Create(ammoDot, TweenInfo.new(0.2), { BackgroundColor3 = col }):Play()
+    ammoStatusLabel.Text = txt
+    ammoStatusLabel.TextColor3 = refilling and Color3.fromRGB(140, 200, 255) or Color3.fromRGB(100, 130, 200)
+end
+
+-- =========================================
+-- DRAGGING LOGIC
+-- =========================================
+local dragging = false
+local dragStartPos = nil
+local buttonStartPos = nil
+
+local function animateBorderColor(targetColor)
+    TweenService:Create(stroke, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+        Color = targetColor
+    }):Play()
+    TweenService:Create(actionBgStroke, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+        Color = targetColor
+    }):Play()
+end
+
+local function updateIndicator(active)
+    local col = active and COL_IND_ON or COL_IND_OFF
+    TweenService:Create(indicator, TweenInfo.new(0.25, Enum.EasingStyle.Sine), {
+        BackgroundColor3 = col
+    }):Play()
+    TweenService:Create(indicatorGlow, TweenInfo.new(0.25, Enum.EasingStyle.Sine), {
+        BackgroundColor3 = col
+    }):Play()
+end
+
+button.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+        dragStartPos = input.Position
+        buttonStartPos = button.Position
+    end
+end)
+
+button.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement then
+        if dragStartPos and not dragging then
+            local delta = input.Position - dragStartPos
+            if math.abs(delta.X) > 5 or math.abs(delta.Y) > 5 then
+                dragging = true
+            end
+        end
+        if dragging and buttonStartPos then
+            local delta = input.Position - dragStartPos
+            button.Position = UDim2.new(
+                buttonStartPos.X.Scale,
+                buttonStartPos.X.Offset + delta.X,
+                buttonStartPos.Y.Scale,
+                buttonStartPos.Y.Offset + delta.Y
+            )
+        end
+    end
+end)
+
+button.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if not dragging then
+            -- Only toggle if the click/tap lands inside the action pill
+            local pos = input.Position
+            local ap = actionBg.AbsolutePosition
+            local as = actionBg.AbsoluteSize
+            if pos.X >= ap.X and pos.X <= ap.X + as.X and
+               pos.Y >= ap.Y and pos.Y <= ap.Y + as.Y then
+                toggleMasterEnable()
+            end
+        end
+        dragging = false
+        dragStartPos = nil
+        buttonStartPos = nil
+    end
+end)
+
+-- ========== REMOTE CACHING ==========
+-- Cache the remote once at startup instead of fetching it on every use
+local useConsumableRemote = nil
+local remoteReady = false
+
+local function tryInitRemote()
+    local ok, result = pcall(function()
+        local remoteFuncs = ReplicatedStorage:WaitForChild("RemoteFunctions", 20)
+        return remoteFuncs:WaitForChild("UseConsumable", 20)
+    end)
+    if ok and result then
+        useConsumableRemote = result
+        remoteReady = true
+        print("[Remote] UseConsumable cached successfully")
+    else
+        warn("[Remote] Could not find UseConsumable – will retry in 10s")
+        task.delay(10, tryInitRemote)
+    end
+end
+task.spawn(tryInitRemote)
+
+-- ========== COOLDOWN SYSTEM ==========
+-- Per-consumable cooldowns (seconds) – prevents double-firing if loops overlap
+local COOLDOWNS = {
+    ["Booster Kit"] = 30,
+    ["Bandage"]     = 20,
+    ["Energy Drink"] = 8,
+}
+local lastUsed = {}
+
+local function canUse(itemName)
+    local cd = COOLDOWNS[itemName] or 0
+    local last = lastUsed[itemName]
+    if not last then return true end
+    return (tick() - last) >= cd
+end
+
+-- ========== CONSUMABLE AVAILABILITY ==========
+local function hasConsumable(itemName)
+    local backgear = LocalPlayer:FindFirstChild("Backgear")
+    if not backgear then return false end
+    return backgear:FindFirstChild(itemName) ~= nil
+end
+
+local function useConsumableIfOwned(itemName)
+    if not remoteReady then
+        warn("[Consumable] Remote not ready yet, skipping:", itemName)
+        return false
+    end
+    if not hasConsumable(itemName) then return false end
+    if not canUse(itemName) then return false end  -- cooldown guard
+
+    lastUsed[itemName] = tick()  -- stamp before call to block overlap
+
+    local success, err = pcall(function()
+        useConsumableRemote:InvokeServer(itemName, LocalPlayer)
+    end)
+    if not success then
+        warn("[Consumable] Failed to use", itemName, ":", err)
+        lastUsed[itemName] = nil  -- refund cooldown on failure
+        return false
+    end
+    print("[Consumable] Used:", itemName)
+    return true
+end
+
+-- Reset on respawn (cooldowns + ammo refill state)
+LocalPlayer.CharacterAdded:Connect(function()
+    lastUsed         = {}
+    isRefilling      = false
+    lastRefillTime   = 0
+    currentAmmoValue = nil
+    maxAmmo          = 0
+    setAmmoStatus(false)
+    print("[System] Character respawned – cooldowns & ammo state reset")
+end)
+
+-- ========== STATUS BADGE HELPER ==========
+local STATUS_COLORS = {
+    OFF   = { badge = Color3.fromRGB(60, 30, 30),   text = Color3.fromRGB(140, 80, 80)   },
+    DAY   = { badge = Color3.fromRGB(50, 40, 15),   text = Color3.fromRGB(200, 160, 50)  },
+    NIGHT = { badge = Color3.fromRGB(20, 25, 60),   text = Color3.fromRGB(100, 120, 220) },
+    BOSS  = { badge = Color3.fromRGB(55, 15, 15),   text = Color3.fromRGB(230, 60, 60)   },
+}
+
+local function setStatus(key)
+    local s = STATUS_COLORS[key] or STATUS_COLORS.OFF
+    local label = key == "BOSS" and "BOSS!" or key
+    TweenService:Create(badge,      TweenInfo.new(0.25), { BackgroundColor3 = s.badge }):Play()
+    TweenService:Create(badgeLabel, TweenInfo.new(0.25), { TextColor3       = s.text  }):Play()
+    badgeLabel.Text = label
+end
+
+-- ========== TIME DETECTION ==========
+local function getCurrentHour()
+    -- Scan all TextLabels in PlayerGui for a HH:MM pattern
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return nil end
+    for _, child in ipairs(playerGui:GetDescendants()) do
+        if child:IsA("TextLabel") then
+            local h = tonumber(child.Text:match("^(%d%d):%d%d$"))
+            if h and h >= 0 and h <= 23 then
+                return h
+            end
+        end
+    end
+    return nil
+end
+
+local function isNightTime()
+    local hour = getCurrentHour()
+    if hour == nil then return false end
+    return hour >= 18 or hour < 6
+end
+
+-- ========== STATE ==========
+local mainRunning    = false
+local masterEnabled  = false
+local loopsActive    = false
+local toggleDebounce = false
+
+-- Thread handles
+local boosterThread     = nil
+local bandageThread     = nil
+local deadeyeBossThread = nil
+local energyBossThread  = nil
+local bossConnection    = nil
+local currentBoss       = nil
+
+-- ========== BOSS LOOPS ==========
+local function deadeyeBossLoop()
+    while mainRunning and currentBoss and currentBoss.Parent do
+        useConsumableIfOwned("Deadeye Drink")  -- cooldown guard deduplicates vs night loop
+        task.wait(20)
+    end
+end
+
+local function energyBossLoop()
+    while mainRunning and currentBoss and currentBoss.Parent do
+        useConsumableIfOwned("Energy Drink")
+        task.wait(8)
+    end
+end
+
+local function onBossAdded(bossInstance)
+    if not mainRunning then return end
+    if bossInstance.Name ~= "Boss" then return end
+    if currentBoss and currentBoss.Parent then return end
+    currentBoss = bossInstance
+
+    -- UI: switch to BOSS status + update title
+    setStatus("BOSS")
+    titleLabel.Text = "⚡ BOSS"
+
+    print("[Boss] Boss detected – Deadeye (20s) & Energy (8s) loops starting")
+    if deadeyeBossThread then task.cancel(deadeyeBossThread) end
+    if energyBossThread  then task.cancel(energyBossThread)  end
+    deadeyeBossThread = task.spawn(deadeyeBossLoop)
+    energyBossThread  = task.spawn(energyBossLoop)
+
+    local removalConn
+    removalConn = bossInstance.AncestryChanged:Connect(function()
+        if bossInstance.Parent then return end
+        removalConn:Disconnect()
+        if currentBoss ~= bossInstance then return end
+        currentBoss = nil
+        if deadeyeBossThread then task.cancel(deadeyeBossThread) end
+        if energyBossThread  then task.cancel(energyBossThread)  end
+        deadeyeBossThread = nil
+        energyBossThread  = nil
+
+        -- UI: revert back to night status
+        titleLabel.Text = "AUTO KITS"
+        setStatus(loopsActive and "NIGHT" or "DAY")
+        print("[Boss] Boss gone – energy loops stopped")
+    end)
+end
+
+local function startBossMonitoring()
+    if bossConnection then return end
+    task.spawn(function()
+        local ok, zombies = pcall(function()
+            return Workspace:WaitForChild("Zombies", 30)
+        end)
+        if not ok or not zombies then
+            warn("[Boss] Zombies folder not found within 30s")
+            return
+        end
+        -- Check for a boss that already exists
+        local existing = zombies:FindFirstChild("Boss")
+        if existing then onBossAdded(existing) end
+        bossConnection = zombies.ChildAdded:Connect(onBossAdded)
+    end)
+end
+
+local function stopBossMonitoring()
+    if bossConnection then
+        bossConnection:Disconnect()
+        bossConnection = nil
+    end
+    if deadeyeBossThread then task.cancel(deadeyeBossThread) end
+    if energyBossThread  then task.cancel(energyBossThread)  end
+    deadeyeBossThread = nil
+    energyBossThread  = nil
+    currentBoss = nil
+end
+
+-- ========== MAIN NIGHT LOOPS ==========
+local function boosterLoop()
+    while mainRunning do
+        useConsumableIfOwned("Booster Kit")
+        task.wait(30)
+    end
+end
+
+local function bandageLoop()
+    while mainRunning do
+        useConsumableIfOwned("Bandage")
+        task.wait(20)
+    end
+end
+
+local function physicallyStartLoops()
+    if loopsActive then return end
+    loopsActive = true
+    mainRunning = true
+    boosterThread = task.spawn(boosterLoop)
+    bandageThread = task.spawn(bandageLoop)
+    startBossMonitoring()
+    useConsumableIfOwned("Deadeye Drink")  -- one-time fire at night start
+    setStatus("NIGHT")
+    print("[System] Night loops started (Booster 30s | Bandage 20s | Deadeye once at start + boss loop)")
+end
+
+local function physicallyStopLoops()
+    if not loopsActive then return end
+    loopsActive = false
+    mainRunning = false
+    if boosterThread then task.cancel(boosterThread) end
+    if bandageThread then task.cancel(bandageThread) end
+    stopBossMonitoring()
+    boosterThread   = nil
+    bandageThread   = nil
+    titleLabel.Text = "AUTO KITS"
+    setStatus(masterEnabled and "DAY" or "OFF")
+    print("[System] Loops stopped")
+end
+
+local function updateLoopsBasedOnTime()
+    if masterEnabled and isNightTime() then
+        physicallyStartLoops()
+    else
+        physicallyStopLoops()
+    end
+end
+
+-- ========== TOGGLE ==========
+function toggleMasterEnable()
+    if toggleDebounce then return end
+    toggleDebounce = true
+    task.delay(0.4, function() toggleDebounce = false end)
+
+    masterEnabled = not masterEnabled
+    if masterEnabled then
+        textLabel.Text = "DEACTIVATE"
+        updateIndicator(true)
+        animateBorderColor(COL_STROKE_ON)
+        TweenService:Create(actionBg, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+            BackgroundColor3 = Color3.fromRGB(14, 28, 22)
+        }):Play()
+        setStatus(isNightTime() and "NIGHT" or "DAY")
+        print("[Master] Enabled")
+        updateLoopsBasedOnTime()
+    else
+        textLabel.Text = "ACTIVATE"
+        updateIndicator(false)
+        animateBorderColor(COL_STROKE_OFF)
+        TweenService:Create(actionBg, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {
+            BackgroundColor3 = COL_ACTION_BG
+        }):Play()
+        physicallyStopLoops()
+        setStatus("OFF")
+        print("[Master] Disabled")
+    end
+end
+
+-- ========== TIME MONITOR (1s tick) ==========
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if not masterEnabled then continue end
+        local wasNight = loopsActive
+        updateLoopsBasedOnTime()
+        if not wasNight and loopsActive then
+            print("[Time] Night started – loops activated")
+        elseif wasNight and not loopsActive then
+            print("[Time] Day started – loops paused")
+        end
+    end
+end)
+
+-- ========== DEBUG LOGGER (10s) ==========
+task.spawn(function()
+    while true do
+        task.wait(10)
+        local hour = getCurrentHour()
+        if hour then
+            print(string.format("[Time] %02d:xx | Night: %s | Loops: %s | Boss: %s",
+                hour,
+                tostring(isNightTime()),
+                tostring(loopsActive),
+                tostring(currentBoss ~= nil)
+            ))
+        else
+            print("[Time] Could not detect in-game time")
+        end
+    end
+end)
+
+-- ========== AUTO AMMO REFILL (always-on, day & night) ==========
+local VirtualInput   = game:GetService("VirtualInputManager")
+local RunService     = game:GetService("RunService")
+
+local REFILL_COOLDOWN = 2
+local AMMO_THRESHOLD  = 0.30   -- 30% threshold
+local PROXIMITY_RANGE = 10     -- studs from HumanoidRootPart to box centre
+
+local lastRefillTime  = 0
+local isRefilling     = false
+local ammoBoxes       = {}     -- registered ammo box models
+
+local function getCharacter()
+    return LocalPlayer.Character
+end
+
+local function pressF()
+    VirtualInput:SendKeyEvent(true,  Enum.KeyCode.F, false, game)
+    task.wait(0.05)
+    VirtualInput:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+end
+
+-- Ammo source: tool.CurrentValues.Ammo (IntValue, lives in character while equipped)
+local currentAmmoValue = nil
+local maxAmmo          = 0
+
+local function getCurrentAmmo()
+    if currentAmmoValue then return currentAmmoValue.Value end
+    return 0
+end
+
+local function isAmmoLow()
+    if maxAmmo == 0 or currentAmmoValue == nil then return false end
+    return (getCurrentAmmo() / maxAmmo) <= AMMO_THRESHOLD
+end
+
+-- Hook equipped tool's CurrentValues.Ammo directly
+local function hookToolAmmo(tool)
+    if not tool then
+        currentAmmoValue = nil; maxAmmo = 0; return
+    end
+    local cv = tool:FindFirstChild("CurrentValues")
+        or tool:FindFirstChild("CurrentValues", true)
+    if not cv then
+        warn("[Ammo] No CurrentValues in:", tool.Name)
+        currentAmmoValue = nil; maxAmmo = 0; return
+    end
+    local ammoVal = cv:FindFirstChild("Ammo")
+    if not ammoVal then
+        warn("[Ammo] No Ammo IntValue for:", tool.Name)
+        currentAmmoValue = nil; maxAmmo = 0; return
+    end
+    currentAmmoValue = ammoVal
+    maxAmmo = ammoVal.Value
+    print(string.format("[Ammo] Hooked %s | Max: %d | Threshold: ≤%d (%.0f%%)",
+        tool.Name, maxAmmo, math.floor(maxAmmo * AMMO_THRESHOLD), AMMO_THRESHOLD * 100))
+end
+
+-- Watch character for equip/unequip
+local function watchCharacterTools(char)
+    if not char then return end
+    local equipped = char:FindFirstChildOfClass("Tool")
+    if equipped then hookToolAmmo(equipped) end
+    char.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then hookToolAmmo(child) end
+    end)
+    char.ChildRemoved:Connect(function(child)
+        if child:IsA("Tool") then
+            task.delay(0.1, function()
+                hookToolAmmo(char:FindFirstChildOfClass("Tool"))
+            end)
+        end
+    end)
+end
+
+local function onCharacterSpawned(char)
+    currentAmmoValue = nil; maxAmmo = 0
+    task.wait(1)
+    watchCharacterTools(char)
+end
+
+if LocalPlayer.Character then
+    task.spawn(onCharacterSpawned, LocalPlayer.Character)
+end
+LocalPlayer.CharacterAdded:Connect(onCharacterSpawned)
+
+-- ── Proximity refill loop – no Touched needed ─────────────────────────────
+RunService.Heartbeat:Connect(function()
+    if isRefilling then return end
+    if (tick() - lastRefillTime) < REFILL_COOLDOWN then return end
+    if not isAmmoLow() then return end
+
+    local char = getCharacter()
+    if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+
+    for _, boxModel in ipairs(ammoBoxes) do
+        if boxModel and boxModel.Parent then
+            local dist = (root.Position - boxModel:GetPivot().Position).Magnitude
+            if dist <= PROXIMITY_RANGE then
+                isRefilling = true
+                setAmmoStatus(true)
+
+                local ok, err = pcall(pressF)
+                if not ok then warn("[Ammo] pressF error:", err) end
+
+                lastRefillTime = tick()
+                local cur = getCurrentAmmo()
+                print(string.format("[Ammo] Refilled near %s | %d/%d (%.0f%%)",
+                    boxModel.Name, cur, maxAmmo,
+                    maxAmmo > 0 and (cur / maxAmmo) * 100 or 0))
+
+                task.wait(0.5)
+                isRefilling = false
+                setAmmoStatus(false)
+                return
+            end
+        end
+    end
+end)
+
+-- ── Ammo box registry ────────────────────────────────────────────────────────
+local function registerBox(boxModel)
+    for _, b in ipairs(ammoBoxes) do
+        if b == boxModel then return end
+    end
+    table.insert(ammoBoxes, boxModel)
+    print("[Ammo] Registered:", boxModel.Name)
+end
+
+local function unregisterBox(boxModel)
+    for i, b in ipairs(ammoBoxes) do
+        if b == boxModel then
+            table.remove(ammoBoxes, i)
+            return
+        end
+    end
+end
+
+task.spawn(function()
+    local ok, upgrades = pcall(function()
+        return Workspace:WaitForChild("Map", 30):WaitForChild("Upgrades", 30)
+    end)
+    if not ok or not upgrades then
+        warn("[Ammo] Could not find Map.Upgrades within 30s"); return
+    end
+    for _, name in ipairs({"AmmoBox", "RoofAmmo"}) do
+        local box = upgrades:FindFirstChild(name)
+        if box then registerBox(box) end
+    end
+    upgrades.ChildAdded:Connect(function(child)
+        if child.Name == "AmmoBox" or child.Name == "RoofAmmo" then
+            registerBox(child)
+        end
+    end)
+    upgrades.ChildRemoved:Connect(unregisterBox)
+    print(string.format("[Ammo] Ready | Range: %d studs | Threshold: %d%% | Cooldown: %ds",
+        PROXIMITY_RANGE, AMMO_THRESHOLD * 100, REFILL_COOLDOWN))
+end)
+
+
+updateIndicator(false)
+setStatus("OFF")
+setAmmoStatus(false)
+print("[Ready] AUTO KITS v3.0 – consumables night-gated | ammo refill always-on")
+
