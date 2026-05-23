@@ -7,6 +7,9 @@ local RemoteFireMelee = RemoteEvents:WaitForChild("RemoteFireMelee")
 local RemoteCritMelee = RemoteEvents:WaitForChild("RemoteCritMelee")
 local RemoteMelee = RemoteEvents:WaitForChild("RemoteMelee")
 
+-- Load the effect manager for explosions
+local EffectManager = require(ReplicatedStorage:WaitForChild("ModuleScripts"):WaitForChild("EffectManager"))
+
 local CharacterManager = require(ReplicatedStorage:WaitForChild("ModuleScripts"):WaitForChild("CharacterManager"))
 
 local backpack = localPlayer:WaitForChild("Backpack")
@@ -14,6 +17,18 @@ local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
 
 local AURA_RANGE = 35
 local USE_OLD_CRIT = true -- true = "Melee" string 100% crit, false = tool-based crit
+
+-- Explosion configuration per weapon
+local WEAPON_EXPLOSIONS = {
+    ["Knife"] = {type = "Fire", intensity = 6},
+    ["Baseball Bat"] = {type = "Flare", intensity = 8},
+    ["Military Axe"] = {type = "Stun", intensity = 10},
+    ["Katana"] = {type = "Fire", intensity = 9},
+    ["Energy Sword"] = {type = "Flare", intensity = 12},
+    ["Alpha Energy Sword"] = {type = "Flare", intensity = 14},
+    ["Shovel"] = {type = "Stun", intensity = 11},
+    ["Axe"] = {type = "Stun", intensity = 10}
+}
 
 local function enableRunGun()
     local perks = localPlayer:WaitForChild("PlayerPerks")
@@ -155,6 +170,28 @@ local function buildHitsEnergySword(targets)
     return hits
 end
 
+local function createExplosionsAtTargets(weaponName, targets)
+    if not targets or #targets == 0 then return end
+    
+    local explosionConfig = WEAPON_EXPLOSIONS[weaponName]
+    if not explosionConfig then return end
+    
+    for _, zombie in ipairs(targets) do
+        local part = getHitPart(zombie)
+        if part then
+            task.spawn(function()
+                pcall(function()
+                    EffectManager:CreateExplosion(
+                        part.Position,
+                        explosionConfig.intensity,
+                        explosionConfig.type
+                    )
+                end)
+            end)
+        end
+    end
+end
+
 local function doFire(weaponName, targets)
     local char = localPlayer.Character
     local bp = localPlayer.Backpack
@@ -168,6 +205,7 @@ local function doFire(weaponName, targets)
         fireCrit("Melee")
         task.wait(0.05)
         RemoteFireMelee:FireServer("Melee", hits, {["Momentum"] = 100, ["Critical"] = true})
+        createExplosionsAtTargets(weaponName, targets)
 
     elseif weaponName == "Baseball Bat" then
         local tool = char:FindFirstChild("Baseball Bat") or bp:FindFirstChild("Baseball Bat")
@@ -176,6 +214,7 @@ local function doFire(weaponName, targets)
         fireRemoteMelee(tool)
         fireCrit(tool)
         RemoteFireMelee:FireServer(tool, hits, {["ActiveAnimation"] = "Left", ["Critical"] = true, ["Momentum"] = 100})
+        createExplosionsAtTargets(weaponName, targets)
 
     elseif weaponName == "Military Axe" then
         local tool = char:FindFirstChild("Military Axe") or bp:FindFirstChild("Military Axe")
@@ -184,6 +223,7 @@ local function doFire(weaponName, targets)
         fireRemoteMelee(tool)
         fireCrit(tool)
         RemoteFireMelee:FireServer(tool, hits, {["ActiveAnimation"] = "Right", ["Critical"] = true, ["Momentum"] = 100})
+        createExplosionsAtTargets(weaponName, targets)
 
     elseif weaponName == "Katana" then
         local tool = char:FindFirstChild("Katana") or bp:FindFirstChild("Katana")
@@ -192,6 +232,7 @@ local function doFire(weaponName, targets)
         fireRemoteMelee(tool)
         fireCrit(tool)
         RemoteFireMelee:FireServer(tool, hits, {["ActiveAnimation"] = "Left", ["Critical"] = true, ["Momentum"] = 100})
+        createExplosionsAtTargets(weaponName, targets)
 
     elseif weaponName == "Energy Sword" then
         local tool = char:FindFirstChild("Energy Sword") or bp:FindFirstChild("Energy Sword")
@@ -200,6 +241,7 @@ local function doFire(weaponName, targets)
         fireRemoteMelee(tool)
         fireCrit(tool)
         RemoteFireMelee:FireServer(tool, hits, {["ActiveAnimation"] = "Right", ["Critical"] = true})
+        createExplosionsAtTargets(weaponName, targets)
 
     elseif weaponName == "Alpha Energy Sword" then
         local tool = char:FindFirstChild("Alpha Energy Sword") or bp:FindFirstChild("Alpha Energy Sword")
@@ -208,6 +250,7 @@ local function doFire(weaponName, targets)
         fireRemoteMelee(tool)
         fireCrit(tool)
         RemoteFireMelee:FireServer(tool, hits, {["ActiveAnimation"] = "Right", ["Critical"] = true, ["Momentum"] = 100})
+        createExplosionsAtTargets(weaponName, targets)
 
     elseif weaponName == "Shovel" then
         local tool = char:FindFirstChild("Shovel") or bp:FindFirstChild("Shovel")
@@ -216,6 +259,7 @@ local function doFire(weaponName, targets)
         fireRemoteMelee(tool)
         fireCrit(tool)
         RemoteFireMelee:FireServer(tool, hits, {["ActiveAnimation"] = "Over", ["Critical"] = true, ["Momentum"] = 100})
+        createExplosionsAtTargets(weaponName, targets)
 
     elseif weaponName == "Axe" then
         local tool = char:FindFirstChild("Axe") or bp:FindFirstChild("Axe")
@@ -224,6 +268,7 @@ local function doFire(weaponName, targets)
         fireRemoteMelee(tool)
         fireCrit(tool)
         RemoteFireMelee:FireServer(tool, hits, {["ActiveAnimation"] = "Right", ["Critical"] = true, ["Momentum"] = 100})
+        createExplosionsAtTargets(weaponName, targets)
     end
 end
 
